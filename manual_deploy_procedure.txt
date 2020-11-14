@@ -1,0 +1,18 @@
+# Application deployment 
+-----
+## MariaDB deployment
+oc new-app --docker-image=registry.centos.org/centos/mariadb --name database \
+	-e MYSQL_DATABASE=test -e MYSQL_USER=test \
+	-e MYSQL_PASSWORD=test -e MYSQL_ROOT_PASSWORD=test
+
+oc cp mysql.sql database_pod:/tmp/mysql.sql
+oc rsh database_pod 
+```bash
+  bash-4$ mysql -utest -ptest test < /tmp/mysql.sql
+```
+-----
+## PHP app deployment
+oc new-app https://github.com/aletiasoluciones/php-sql-sample --name app \
+	-e DB_HOST=database -e DB_PORT=3306 \
+	-e DB_USER=test -e DB_PASS=test \
+        -e DB_NAME=test	
