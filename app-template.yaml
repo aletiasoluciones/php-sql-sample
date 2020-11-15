@@ -1,0 +1,258 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: app-php-template
+objects:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: "${APP_DEF}"
+    name: "${APP_DEF}"
+  spec:
+    lookupPolicy:
+      local: false
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    labels:
+      app: "${DB_DEF}"
+    name: "${DB_DEF}"
+  spec:
+    lookupPolicy:
+      local: false
+    tags:
+    - from:
+        kind: DockerImage
+        name: registry.centos.org/centos/mariadb
+      importPolicy: {}
+      name: latest
+      referencePolicy:
+        type: Source
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: "${APP_DEF}"
+    name: "${APP_DEF}"
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    - name: 8443-tcp
+      port: 8443
+      protocol: TCP
+      targetPort: 8443
+    selector:
+      app: "${APP_DEF}"
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: Service
+  metadata:
+    labels:
+      app: "${DB_DEF}"
+    name: "${DB_DEF}"
+  spec:
+    ports:
+    - name: 3306-tcp
+      port: 3306
+      protocol: TCP
+      targetPort: 3306
+    selector:
+      app: "${DB_DEF}"
+    sessionAffinity: None
+    type: ClusterIP
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: "${APP_DEF}"
+    name: "${APP_DEF}"
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    triggers:
+      - type: "ConfigChange"
+      - type: "ImageChange"
+        imageChangeParams:
+          automatic: true
+          containerNames:
+            - "${APP_DEF}"
+          from:
+            kind: "ImageStreamTag"
+            name: "${APP_DEF}:latest"
+    revisionHistoryLimit: 10
+    selector:
+        app: "${APP_DEF}"
+    strategy:
+      type: "Rolling"
+    template:
+      metadata:
+        labels:
+          app: "${APP_DEF}"
+      spec:
+        containers:
+        - env:
+          - name: DB_HOST
+            value: "${DB_DEF}"
+          - name: DB_NAME
+            value: "${DB_NAME}"
+          - name: DB_PASS
+            value: "${DB_PASS}"
+          - name: DB_PORT
+            value: "3306"
+          - name: DB_USER
+            value: "${DB_USER}"
+          image: "${APP_DEF}:latest"
+          imagePullPolicy: Always
+          name: "${APP_DEF}"
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          - containerPort: 8443
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    labels:
+      app: "${DB_DEF}"
+    name: "${DB_DEF}"
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    triggers:
+      - type: "ConfigChange"
+      - type: "ImageStreamTag"
+        imageChangeParams:
+          automatic: true
+          containerNames: 
+            - "${DB_DEF}"
+          from:
+            kind: "ImageStreamTag"
+            name: "${DB_DEF}:latest"
+    revisionHistoryLimit: 10
+    selector:
+        app: "${DB_DEF}"
+    strategy:
+      type: "Rolling"
+    template:
+      metadata:
+        labels:
+          app: "${DB_DEF}"
+      spec:
+        containers:
+        - env:
+          - name: MYSQL_DATABASE
+            value: "${DB_NAME}"
+          - name: MYSQL_PASSWORD
+            value: "${DB_PASS}"
+          - name: MYSQL_ROOT_PASSWORD
+            value: "${DB_ROOT_PASS}"
+          - name: MYSQL_USER
+            value: "${DB_USER}"
+          image: "${DB_DEF}:latest"
+          imagePullPolicy: IfNotPresent
+          name: "${DB_DEF}"
+          ports:
+          - containerPort: 3306
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /var/lib/mysql
+            name: "${DB_DEF}-volume-1"
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - emptyDir: {}
+          name: "${DB_DEF}-volume-1"
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: "${APP_DEF}"
+    name: "${APP_DEF}"
+  spec:
+    failedBuildsHistoryLimit: 5
+    nodeSelector: null
+    output:
+      to:
+        kind: ImageStreamTag
+        name: "${APP_DEF}:latest"
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    source:
+      git:
+        uri: "${GIT_REPO}"
+      type: Git
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: php:7.2
+          namespace: openshift
+      type: Source
+    successfulBuildsHistoryLimit: 5
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    labels:
+      app: "${APP_DEF}"
+    name: "${APP_DEF}"
+  spec:
+    host: "${HOSTNAME}"
+    port:
+      targetPort: 8080-tcp
+    to:
+      kind: Service
+      name: "${APP_DEF}"
+      weight: 100
+    wildcardPolicy: None
+parameters:
+  - name: APP_DEF
+    description: "The name of the application"
+    required: true
+  - name: DB_DEF
+    description: "The name of the database app"
+    required: true
+  - name: HOSTNAME
+    description: "The application fqdn"
+  - name: GIT_REPO
+    description: "The Git Repository URL"
+    value: "https://github.com/aletiasoluciones/php-sql-sample"
+  - name: DB_NAME
+    description: "The DB name"
+    generate: expression
+    from: "[a-zA-Z0-9]{9}"
+  - name: DB_PASS
+    description: "The DB password"
+    generate: expression
+    from: "[a-zA-Z0-9]{9}"
+  - name: DB_USER
+    description: "The DB username"
+    generate: expression
+    from: "user[a-zA-Z0-9]{6}"
+  - name: DB_ROOT_PASS
+    description: "The DB root password"
+    generate: expression
+    from: "[a-zA-Z0-9]{16}"
+
+  
+
+  
