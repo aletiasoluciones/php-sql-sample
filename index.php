@@ -1,4 +1,4 @@
-<h1>Hello World!</h1>
+<h1>Only in Dev</h1>
  <?php
 $servername = getenv('DATABASE_SERVICE_HOST');
 $serverport = getenv('DATABASE_SERVICE_PORT');
