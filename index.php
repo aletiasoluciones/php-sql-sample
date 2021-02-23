@@ -1,7 +1,7 @@
 <h1>Hello World!</h1>
  <?php
-$servername = getenv('DATABASE_SERVICE_HOST');
-$serverport = getenv('DATABASE_SERVICE_PORT');
+$servername = 'database';
+$serverport = '3306';
 $username = getenv('DB_USER');
 $password = getenv('DB_PASS');
 $dbname = getenv('DB_NAME');
